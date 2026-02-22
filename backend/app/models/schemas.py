@@ -22,6 +22,23 @@ class PantryToggleRequest(BaseModel):
     quantity: str | None = None
 
 
+class IngredientSummary(BaseModel):
+    id: int
+    name: str
+    category: str
+    default_unit: str
+
+
+class IngredientListResponse(BaseModel):
+    items: list[IngredientSummary]
+
+
+class IngredientCreateRequest(BaseModel):
+    name: str
+    category: str
+    default_unit: str
+
+
 class MissingItem(BaseModel):
     name: str
     cost_est: str
@@ -43,6 +60,15 @@ class ChatMessageRequest(BaseModel):
     text: str | None = None
     audio_base64: str | None = None
     provider: Literal["groq"] = "groq"
+
+
+class RecipeAssistantRequest(BaseModel):
+    dish_name: str
+    question: str | None = None
+
+
+class RecipeAssistantResponse(BaseModel):
+    answer: str
 
 
 class AuthLoginRequest(BaseModel):

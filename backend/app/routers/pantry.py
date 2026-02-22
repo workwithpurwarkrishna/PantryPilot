@@ -30,6 +30,8 @@ def toggle_pantry_item(
     user: AuthUser = Depends(get_current_user),
     db: DBService = Depends(get_user_db),
 ) -> PantryResponse:
+    body = payload.model_dump(exclude_unset=True)
+    quantity_provided = "quantity" in body
     try:
         db.ensure_profile(user.id)
         db.upsert_pantry_item(
@@ -37,6 +39,7 @@ def toggle_pantry_item(
             ingredient_id=payload.ingredient_id,
             is_in_stock=payload.status,
             quantity=payload.quantity,
+            quantity_provided=quantity_provided,
         )
         items = db.get_pantry(user.id)
     except Exception as exc:  # pragma: no cover

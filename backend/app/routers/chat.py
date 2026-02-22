@@ -1,7 +1,12 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from app.dependencies import AuthUser, get_current_user
-from app.models.schemas import ChatMessageRequest, ChatResponse
+from app.models.schemas import (
+    ChatMessageRequest,
+    ChatResponse,
+    RecipeAssistantRequest,
+    RecipeAssistantResponse,
+)
 from app.services.ai_service import AIService
 from app.services.db_service import DBService
 
@@ -39,6 +44,35 @@ def post_message(
             user_text = ai.transcribe_audio(payload.audio_base64, x_custom_api_key)
 
         return ai.generate_recipe_cards(user_text or "", pantry_items, x_custom_api_key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/recipe-assistant", response_model=RecipeAssistantResponse)
+def recipe_assistant(
+    payload: RecipeAssistantRequest,
+    user: AuthUser = Depends(get_current_user),
+    ai: AIService = Depends(get_ai),
+    db: DBService = Depends(get_user_db),
+    x_custom_api_key: str | None = Header(default=None),
+) -> RecipeAssistantResponse:
+    if not payload.dish_name.strip():
+        raise HTTPException(status_code=400, detail="dish_name is required")
+
+    try:
+        db.ensure_profile(user.id)
+        pantry_items = db.get_pantry(user.id)
+        answer = ai.generate_recipe_assistant_answer(
+            dish_name=payload.dish_name.strip(),
+            question=payload.question,
+            pantry_items=pantry_items,
+            custom_api_key=x_custom_api_key,
+        )
+        if not answer:
+            answer = "I couldn't generate a recipe response. Please try again."
+        return RecipeAssistantResponse(answer=answer)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover

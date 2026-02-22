@@ -5,7 +5,7 @@ from uuid import UUID
 from supabase import Client, create_client
 
 from app.config import get_settings
-from app.models.schemas import PantryIngredient
+from app.models.schemas import IngredientSummary, PantryIngredient
 
 
 class DBService:
@@ -57,12 +57,26 @@ class DBService:
         ingredient_id: int,
         is_in_stock: bool,
         quantity: str | None,
+        quantity_provided: bool = True,
     ) -> None:
+        resolved_quantity = quantity
+        if not quantity_provided:
+            existing = (
+                self.client.table("pantry_items")
+                .select("quantity")
+                .eq("user_id", str(user_id))
+                .eq("ingredient_id", ingredient_id)
+                .limit(1)
+                .execute()
+            )
+            if existing.data:
+                resolved_quantity = existing.data[0].get("quantity")
+
         payload = {
             "user_id": str(user_id),
             "ingredient_id": ingredient_id,
             "is_in_stock": is_in_stock,
-            "quantity": quantity,
+            "quantity": resolved_quantity,
         }
         self.client.table("pantry_items").upsert(
             payload, on_conflict="user_id,ingredient_id"
@@ -72,3 +86,41 @@ class DBService:
         self.client.table("profiles").upsert(
             {"id": str(user_id)}, on_conflict="id"
         ).execute()
+
+    def list_ingredients(
+        self,
+        search: str | None = None,
+        limit: int = 50,
+    ) -> list[IngredientSummary]:
+        query = (
+            self.client.table("ingredients")
+            .select("id,name,category,default_unit")
+            .order("name")
+            .limit(limit)
+        )
+        if search:
+            query = query.ilike("name", f"%{search}%")
+        result = query.execute()
+        return [IngredientSummary.model_validate(row) for row in (result.data or [])]
+
+    def create_ingredient(
+        self,
+        name: str,
+        category: str,
+        default_unit: str,
+    ) -> IngredientSummary:
+        result = (
+            self.client.table("ingredients")
+            .insert(
+                {
+                    "name": name.strip(),
+                    "category": category.strip(),
+                    "default_unit": default_unit.strip(),
+                }
+            )
+            .execute()
+        )
+        data = (result.data or [None])[0]
+        if data is None:
+            raise RuntimeError("Ingredient could not be created")
+        return IngredientSummary.model_validate(data)

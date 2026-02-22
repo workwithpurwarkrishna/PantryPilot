@@ -20,20 +20,60 @@ class ApiClient {
         .cast<Map<String, dynamic>>();
   }
 
+  Future<List<Map<String, dynamic>>> getIngredients({
+    required String accessToken,
+    String? search,
+    int limit = 50,
+  }) async {
+    final params = <String, String>{
+      'limit': '$limit',
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+    };
+    final uri = Uri.parse('$baseUrl/ingredients').replace(queryParameters: params);
+    final response = await http.get(
+      uri,
+      headers: _authHeaders(accessToken),
+    );
+    final payload = _decode(response);
+    return (payload['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> createIngredient({
+    required String accessToken,
+    required String name,
+    required String category,
+    required String defaultUnit,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/ingredients'),
+      headers: _authHeaders(accessToken),
+      body: jsonEncode({
+        'name': name,
+        'category': category,
+        'default_unit': defaultUnit,
+      }),
+    );
+    return _decode(response);
+  }
+
   Future<List<Map<String, dynamic>>> togglePantryItem({
     required String accessToken,
     required int ingredientId,
     required bool status,
     String? quantity,
+    bool sendQuantity = false,
   }) async {
+    final body = <String, dynamic>{
+      'ingredient_id': ingredientId,
+      'status': status,
+    };
+    if (sendQuantity) {
+      body['quantity'] = quantity;
+    }
     final response = await http.post(
       Uri.parse('$baseUrl/pantry/toggle'),
       headers: _authHeaders(accessToken),
-      body: jsonEncode({
-        'ingredient_id': ingredientId,
-        'status': status,
-        'quantity': quantity,
-      }),
+      body: jsonEncode(body),
     );
 
     final payload = _decode(response);
@@ -61,6 +101,30 @@ class ApiClient {
     );
 
     return _decode(response);
+  }
+
+  Future<String> getRecipeAssistantAnswer({
+    required String accessToken,
+    required String dishName,
+    String? question,
+    String? groqApiKey,
+  }) async {
+    final headers = _authHeaders(accessToken);
+    if (groqApiKey != null && groqApiKey.isNotEmpty) {
+      headers['x-custom-api-key'] = groqApiKey;
+    }
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/chat/recipe-assistant'),
+      headers: headers,
+      body: jsonEncode({
+        'dish_name': dishName,
+        if (question != null && question.trim().isNotEmpty) 'question': question.trim(),
+      }),
+    );
+
+    final payload = _decode(response);
+    return (payload['answer'] ?? '').toString();
   }
 
   Map<String, String> _authHeaders(String accessToken) => {

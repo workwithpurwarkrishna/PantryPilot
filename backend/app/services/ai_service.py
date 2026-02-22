@@ -94,3 +94,52 @@ class AIService:
                     item["cost_est"] = str(item["cost_est"])
 
         return data
+
+    def generate_recipe_assistant_answer(
+        self,
+        dish_name: str,
+        question: str | None,
+        pantry_items: list[PantryIngredient],
+        custom_api_key: str | None,
+    ) -> str:
+        api_key = self._resolve_api_key(custom_api_key)
+        client = Groq(api_key=api_key)
+
+        pantry_list = [
+            f"{item.name} ({item.quantity or 'unspecified quantity'})"
+            for item in pantry_items
+            if item.is_in_stock
+        ]
+        user_question = question.strip() if question else ""
+
+        if user_question:
+            task = (
+                f"Dish: {dish_name}\n"
+                f"User follow-up question: {user_question}\n"
+                "Answer specifically for this dish in concise steps and practical guidance."
+            )
+        else:
+            task = (
+                f"Dish: {dish_name}\n"
+                "Provide a complete practical recipe including ingredients, steps, "
+                "time, tips, and substitutions based on user's pantry."
+            )
+
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            temperature=0.2,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are PantryPilot's recipe assistant. Give clear, usable cooking guidance. "
+                        "Keep tone concise and practical."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Pantry in-stock items: {pantry_list}\n\n{task}",
+                },
+            ],
+        )
+        return (completion.choices[0].message.content or "").strip()
