@@ -1,0 +1,23 @@
+name: pantry_pilot
+description: Smart kitchen assistant for inventory-aware recipes.
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.11.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^2.6.1
+  flutter_secure_storage: ^9.2.4
+  http: ^1.5.0
+  supabase_flutter: ^2.10.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

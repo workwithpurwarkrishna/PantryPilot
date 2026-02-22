@@ -1,0 +1,11 @@
+{
+  "folders": [
+    { "path": "." }
+  ],
+  "settings": {
+    "files.exclude": {
+      "**/.venv": true,
+      "**/.dart_tool": true
+    }
+  }
+}
