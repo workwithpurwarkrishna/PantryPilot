@@ -85,6 +85,8 @@ class ApiClient {
     required String text,
     required String accessToken,
     String? groqApiKey,
+    String? extraBudgetInr,
+    int? peopleCount,
   }) async {
     final headers = _authHeaders(accessToken);
     if (groqApiKey != null && groqApiKey.isNotEmpty) {
@@ -96,6 +98,9 @@ class ApiClient {
       headers: headers,
       body: jsonEncode({
         'text': text,
+        if (extraBudgetInr != null && extraBudgetInr.trim().isNotEmpty)
+          'extra_budget_inr': extraBudgetInr.trim(),
+        'people_count': peopleCount,
         'provider': 'groq',
       }),
     );
@@ -103,7 +108,7 @@ class ApiClient {
     return _decode(response);
   }
 
-  Future<String> getRecipeAssistantAnswer({
+  Future<Map<String, dynamic>> getRecipeAssistant({
     required String accessToken,
     required String dishName,
     String? question,
@@ -123,8 +128,7 @@ class ApiClient {
       }),
     );
 
-    final payload = _decode(response);
-    return (payload['answer'] ?? '').toString();
+    return _decode(response);
   }
 
   Map<String, String> _authHeaders(String accessToken) => {

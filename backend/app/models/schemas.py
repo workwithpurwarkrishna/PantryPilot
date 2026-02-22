@@ -59,6 +59,8 @@ class ChatResponse(BaseModel):
 class ChatMessageRequest(BaseModel):
     text: str | None = None
     audio_base64: str | None = None
+    extra_budget_inr: str | None = None
+    people_count: int | None = Field(default=None, ge=1)
     provider: Literal["groq"] = "groq"
 
 
@@ -67,8 +69,34 @@ class RecipeAssistantRequest(BaseModel):
     question: str | None = None
 
 
+class RecipeIngredient(BaseModel):
+    name: str
+    quantity: str
+    notes: str | None = None
+
+
+class RecipeStep(BaseModel):
+    step_number: int
+    instruction: str
+    timer_seconds: int | None = None
+
+
+class RecipeDetail(BaseModel):
+    title: str
+    description: str
+    prep_time_minutes: int
+    cook_time_minutes: int
+    servings: int
+    difficulty: Literal["Easy", "Medium", "Hard"]
+    calories_per_serving: int | None = None
+    ingredients: list[RecipeIngredient]
+    steps: list[RecipeStep]
+    chef_tips: list[str]
+
+
 class RecipeAssistantResponse(BaseModel):
-    answer: str
+    answer: str | None = None
+    recipe: RecipeDetail | None = None
 
 
 class AuthLoginRequest(BaseModel):

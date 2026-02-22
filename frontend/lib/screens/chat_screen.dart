@@ -5,6 +5,7 @@ import '../providers/api_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/recipe_card.dart';
+import 'recipe_assistant_screen.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -15,6 +16,8 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
+  final _budgetController = TextEditingController();
+  final _peopleController = TextEditingController();
   bool _loading = false;
   String? _error;
   String? _thought;
@@ -23,6 +26,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void dispose() {
     _controller.dispose();
+    _budgetController.dispose();
+    _peopleController.dispose();
     super.dispose();
   }
 
@@ -39,6 +44,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     final groqKey = await ref.read(groqApiKeyProvider.future);
+    final budget = _budgetController.text.trim();
+    final peopleInput = _peopleController.text.trim();
+    final peopleCount = peopleInput.isEmpty ? null : int.tryParse(peopleInput);
+    if (peopleInput.isNotEmpty && (peopleCount == null || peopleCount < 1)) {
+      setState(() {
+        _error = 'People count must be a valid number (1 or more)';
+      });
+      return;
+    }
 
     setState(() {
       _loading = true;
@@ -50,6 +64,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             text: text,
             accessToken: token,
             groqApiKey: groqKey,
+            extraBudgetInr: budget.isEmpty ? null : budget,
+            peopleCount: peopleCount,
           );
       if (!mounted) return;
       setState(() {
@@ -70,121 +86,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  Future<void> _openRecipeAssistant(String dishName) async {
-    final token = ref.read(currentSessionProvider)?.accessToken;
-    if (token == null || token.isEmpty) return;
-
-    final groqKey = await ref.read(groqApiKeyProvider.future);
-    final followupController = TextEditingController();
-    final answers = <String>[];
-    var busy = true;
-
-    try {
-      final initial = await ref.read(apiClientProvider).getRecipeAssistantAnswer(
-            accessToken: token,
-            dishName: dishName,
-            groqApiKey: groqKey,
-          );
-      answers.add(initial);
-      busy = false;
-    } catch (e) {
-      answers.add('Failed to generate recipe: $e');
-      busy = false;
-    }
-
-    if (!mounted) return;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            Future<void> askMore() async {
-              final q = followupController.text.trim();
-              if (q.isEmpty || busy) return;
-              setModalState(() => busy = true);
-              try {
-                final response = await ref.read(apiClientProvider).getRecipeAssistantAnswer(
-                      accessToken: token,
-                      dishName: dishName,
-                      question: q,
-                      groqApiKey: groqKey,
-                    );
-                if (!context.mounted) return;
-                setModalState(() {
-                  answers.add('Q: $q');
-                  answers.add(response);
-                  followupController.clear();
-                });
-              } catch (e) {
-                if (!context.mounted) return;
-                setModalState(() {
-                  answers.add('Failed: $e');
-                });
-              } finally {
-                if (context.mounted) {
-                  setModalState(() => busy = false);
-                }
-              }
-            }
-
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 16,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-              ),
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height * 0.78,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      dishName,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: 10),
-                    Expanded(
-                      child: ListView.builder(
-                        itemCount: answers.length,
-                        itemBuilder: (context, index) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Text(answers[index]),
-                        ),
-                      ),
-                    ),
-                    if (busy) const LinearProgressIndicator(),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: followupController,
-                            decoration: const InputDecoration(
-                              hintText: 'Ask more about this recipe...',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: busy ? null : askMore,
-                          child: const Text('Ask'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
+  void _openRecipeAssistant(String dishName) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RecipeAssistantScreen(dishName: dishName),
+      ),
     );
-
-    followupController.dispose();
   }
 
   @override
@@ -195,13 +102,38 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            TextField(
+              controller: _controller,
+              decoration: const InputDecoration(
+                hintText: 'Ask for recipe suggestions...',
+                border: OutlineInputBorder(),
+              ),
+              minLines: 1,
+              maxLines: 3,
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    controller: _controller,
+                    controller: _budgetController,
+                    keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
-                      hintText: 'Ask for recipe suggestions...',
+                      labelText: 'Extra Budget (INR) - optional',
+                      prefixText: '₹ ',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 132,
+                  child: TextField(
+                    controller: _peopleController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'People',
+                      hintText: 'e.g. 4',
                       border: OutlineInputBorder(),
                     ),
                   ),

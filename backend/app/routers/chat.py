@@ -43,7 +43,13 @@ def post_message(
         if not user_text and payload.audio_base64:
             user_text = ai.transcribe_audio(payload.audio_base64, x_custom_api_key)
 
-        return ai.generate_recipe_cards(user_text or "", pantry_items, x_custom_api_key)
+        return ai.generate_recipe_cards(
+            user_query=user_text or "",
+            pantry_items=pantry_items,
+            custom_api_key=x_custom_api_key,
+            extra_budget_inr=payload.extra_budget_inr,
+            people_count=payload.people_count,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
@@ -70,9 +76,11 @@ def recipe_assistant(
             pantry_items=pantry_items,
             custom_api_key=x_custom_api_key,
         )
-        if not answer:
-            answer = "I couldn't generate a recipe response. Please try again."
-        return RecipeAssistantResponse(answer=answer)
+        if not answer.answer and answer.recipe is None:
+            return RecipeAssistantResponse(
+                answer="I couldn't generate a recipe response. Please try again."
+            )
+        return answer
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:  # pragma: no cover
