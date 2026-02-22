@@ -1,0 +1,96 @@
+from __future__ import annotations
+
+import base64
+import json
+
+from groq import Groq
+
+from app.config import get_settings
+from app.models.schemas import ChatResponse, PantryIngredient
+
+
+class AIService:
+    def __init__(self) -> None:
+        self.settings = get_settings()
+
+    def _resolve_api_key(self, custom_api_key: str | None) -> str:
+        api_key = custom_api_key or self.settings.groq_api_key
+        if not api_key:
+            raise ValueError("No Groq API key provided")
+        return api_key
+
+    def transcribe_audio(self, audio_base64: str, custom_api_key: str | None) -> str:
+        api_key = self._resolve_api_key(custom_api_key)
+        audio_bytes = base64.b64decode(audio_base64)
+        client = Groq(api_key=api_key)
+        transcript = client.audio.transcriptions.create(
+            file=("audio.wav", audio_bytes),
+            model="whisper-large-v3",
+        )
+        return transcript.text
+
+    def generate_recipe_cards(
+        self,
+        user_query: str,
+        pantry_items: list[PantryIngredient],
+        custom_api_key: str | None,
+    ) -> ChatResponse:
+        api_key = self._resolve_api_key(custom_api_key)
+        client = Groq(api_key=api_key)
+
+        pantry_list = [
+            f"{item.name} ({item.quantity or 'unspecified quantity'})"
+            for item in pantry_items
+            if item.is_in_stock
+        ]
+
+        system_prompt = (
+            "Role: You are PantryPilot, a smart cooking assistant. "
+            "Return strict JSON only. Keys: thought (string), dishes (array). "
+            "Each dish needs name, match_score (0-100), missing_items (name,cost_est), "
+            "and cooking_time. Use INR currency when estimating costs."
+        )
+
+        user_prompt = (
+            f"User Inventory: {pantry_list}\n"
+            f"User Query: {user_query}\n"
+            "Suggest 2 to 5 dishes based strictly on inventory + query."
+        )
+
+        completion = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            temperature=0.2,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+
+        content = completion.choices[0].message.content
+        data = json.loads(content)
+        data = self._normalize_chat_payload(data)
+        return ChatResponse.model_validate(data)
+
+    def _normalize_chat_payload(self, data: dict) -> dict:
+        dishes = data.get("dishes")
+        if not isinstance(dishes, list):
+            return data
+
+        for dish in dishes:
+            if not isinstance(dish, dict):
+                continue
+
+            if "cooking_time" in dish and dish["cooking_time"] is not None:
+                dish["cooking_time"] = str(dish["cooking_time"])
+
+            missing_items = dish.get("missing_items")
+            if not isinstance(missing_items, list):
+                continue
+            for item in missing_items:
+                if not isinstance(item, dict):
+                    continue
+                if "cost_est" in item and item["cost_est"] is not None:
+                    item["cost_est"] = str(item["cost_est"])
+
+        return data
