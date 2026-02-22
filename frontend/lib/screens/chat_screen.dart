@@ -18,9 +18,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final _controller = TextEditingController();
   final _budgetController = TextEditingController();
   final _peopleController = TextEditingController();
+  final _maxTimeController = TextEditingController();
   bool _loading = false;
   String? _error;
   String? _thought;
+  String? _lastQuery;
   List<Map<String, dynamic>> _dishes = [];
 
   @override
@@ -28,6 +30,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _controller.dispose();
     _budgetController.dispose();
     _peopleController.dispose();
+    _maxTimeController.dispose();
     super.dispose();
   }
 
@@ -46,10 +49,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final groqKey = await ref.read(groqApiKeyProvider.future);
     final budget = _budgetController.text.trim();
     final peopleInput = _peopleController.text.trim();
+    final maxTimeInput = _maxTimeController.text.trim();
     final peopleCount = peopleInput.isEmpty ? null : int.tryParse(peopleInput);
+    final maxTimeMinutes = maxTimeInput.isEmpty ? null : int.tryParse(maxTimeInput);
     if (peopleInput.isNotEmpty && (peopleCount == null || peopleCount < 1)) {
       setState(() {
         _error = 'People count must be a valid number (1 or more)';
+      });
+      return;
+    }
+    if (maxTimeInput.isNotEmpty && (maxTimeMinutes == null || maxTimeMinutes < 1)) {
+      setState(() {
+        _error = 'Max time must be a valid number of minutes (1 or more)';
       });
       return;
     }
@@ -66,10 +77,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             groqApiKey: groqKey,
             extraBudgetInr: budget.isEmpty ? null : budget,
             peopleCount: peopleCount,
+            maxTimeMinutes: maxTimeMinutes,
           );
       if (!mounted) return;
       setState(() {
         _thought = result['thought'] as String?;
+        _lastQuery = text;
         _dishes = (result['dishes'] as List<dynamic>).cast<Map<String, dynamic>>();
       });
     } catch (e) {
@@ -86,10 +99,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void _openRecipeAssistant(String dishName) {
+  void _openRecipeAssistant(Map<String, dynamic> dish) {
+    final dishName = (dish['name'] ?? 'Dish').toString();
+    final peopleCount = int.tryParse(_peopleController.text.trim());
+    final maxTimeMinutes = int.tryParse(_maxTimeController.text.trim());
+    final budget = _budgetController.text.trim();
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => RecipeAssistantScreen(dishName: dishName),
+        builder: (_) => RecipeAssistantScreen(
+          dishName: dishName,
+          sourceQuery: _lastQuery,
+          peopleCount: peopleCount,
+          maxTimeMinutes: maxTimeMinutes,
+          extraBudgetInr: budget.isEmpty ? null : budget,
+          dishCardSnapshot: dish,
+        ),
       ),
     );
   }
@@ -112,36 +136,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               maxLines: 3,
             ),
             const SizedBox(height: 8),
-            Row(
+            Column(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _budgetController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Extra Budget (INR) - optional',
-                      prefixText: '₹ ',
-                      border: OutlineInputBorder(),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _budgetController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Extra Budget (INR) - optional',
+                          prefixText: '₹ ',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 132,
-                  child: TextField(
-                    controller: _peopleController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'People',
-                      hintText: 'e.g. 4',
-                      border: OutlineInputBorder(),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 132,
+                      child: TextField(
+                        controller: _maxTimeController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Max Time (min)',
+                          hintText: 'e.g. 30',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: _loading ? null : _send,
-                  child: const Text('Send'),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 132,
+                      child: TextField(
+                        controller: _peopleController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'People',
+                          hintText: 'e.g. 4',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      onPressed: _loading ? null : _send,
+                      child: const Text('Send'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -175,7 +220,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     cookingTime: (dish['cooking_time'] ?? 'N/A').toString(),
                     missingItems: (dish['missing_items'] as List<dynamic>? ?? [])
                         .cast<Map<String, dynamic>>(),
-                    onViewRecipe: () => _openRecipeAssistant(dishName),
+                    onViewRecipe: () => _openRecipeAssistant(dish),
                   );
                 },
               ),

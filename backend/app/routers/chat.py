@@ -49,6 +49,7 @@ def post_message(
             custom_api_key=x_custom_api_key,
             extra_budget_inr=payload.extra_budget_inr,
             people_count=payload.people_count,
+            max_time_minutes=payload.max_time_minutes,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -76,6 +77,13 @@ def recipe_assistant(
             pantry_items=pantry_items,
             custom_api_key=x_custom_api_key,
         )
+        if payload.session_id and payload.question and answer.answer:
+            db.create_cooking_followup(
+                user_id=user.id,
+                session_id=payload.session_id,
+                question=payload.question,
+                answer=answer.answer,
+            )
         if not answer.answer and answer.recipe is None:
             return RecipeAssistantResponse(
                 answer="I couldn't generate a recipe response. Please try again."

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'providers/auth_provider.dart';
 import 'screens/chat_screen.dart';
+import 'screens/history_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/pantry_screen.dart';
 import 'screens/settings_screen.dart';
@@ -69,6 +70,7 @@ class _AppShellState extends State<AppShell> {
   static const _screens = [
     PantryScreen(),
     ChatScreen(),
+    HistoryScreen(),
     SettingsScreen(),
   ];
 
@@ -81,6 +83,7 @@ class _AppShellState extends State<AppShell> {
         destinations: const [
           NavigationDestination(icon: Icon(Icons.kitchen), label: 'Pantry'),
           NavigationDestination(icon: Icon(Icons.chat), label: 'Chef'),
+          NavigationDestination(icon: Icon(Icons.history), label: 'History'),
           NavigationDestination(icon: Icon(Icons.settings), label: 'Settings'),
         ],
         onDestinationSelected: (value) => setState(() => _index = value),

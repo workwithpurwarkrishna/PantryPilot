@@ -1,6 +1,21 @@
-from typing import Literal
+from datetime import datetime
+from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+
+IngredientCategory = Literal[
+    "Vegetables",
+    "Fruits",
+    "Grains & Cereals",
+    "Dairy",
+    "Proteins",
+    "Spices & Seasonings",
+    "Oils",
+    "Sauces",
+    "Others",
+]
 
 
 class PantryIngredient(BaseModel):
@@ -25,7 +40,7 @@ class PantryToggleRequest(BaseModel):
 class IngredientSummary(BaseModel):
     id: int
     name: str
-    category: str
+    category: IngredientCategory
     default_unit: str
 
 
@@ -35,7 +50,7 @@ class IngredientListResponse(BaseModel):
 
 class IngredientCreateRequest(BaseModel):
     name: str
-    category: str
+    category: IngredientCategory
     default_unit: str
 
 
@@ -61,12 +76,14 @@ class ChatMessageRequest(BaseModel):
     audio_base64: str | None = None
     extra_budget_inr: str | None = None
     people_count: int | None = Field(default=None, ge=1)
+    max_time_minutes: int | None = Field(default=None, ge=1, le=300)
     provider: Literal["groq"] = "groq"
 
 
 class RecipeAssistantRequest(BaseModel):
     dish_name: str
     question: str | None = None
+    session_id: UUID | None = None
 
 
 class RecipeIngredient(BaseModel):
@@ -97,6 +114,49 @@ class RecipeDetail(BaseModel):
 class RecipeAssistantResponse(BaseModel):
     answer: str | None = None
     recipe: RecipeDetail | None = None
+
+
+class CookSessionCreateRequest(BaseModel):
+    dish_name: str
+    source_query: str | None = None
+    people_count: int | None = Field(default=None, ge=1)
+    extra_budget_inr: str | None = None
+    max_time_minutes: int | None = Field(default=None, ge=1, le=300)
+    recipe_snapshot: dict[str, Any] | None = None
+    dish_card_snapshot: dict[str, Any] | None = None
+
+
+class CookSessionResponse(BaseModel):
+    id: UUID
+    dish_name: str
+    source_query: str | None = None
+    people_count: int | None = None
+    extra_budget_inr: str | None = None
+    max_time_minutes: int | None = None
+    recipe_snapshot: dict[str, Any] | None = None
+    dish_card_snapshot: dict[str, Any] | None = None
+    cooked_at: datetime
+    cooked_at_ist: str
+    cooked_day_ist: str
+    cooked_date_ist: str
+    cooked_time_ist: str
+
+
+class HistoryListResponse(BaseModel):
+    items: list[CookSessionResponse]
+
+
+class FollowupMessage(BaseModel):
+    id: UUID
+    question: str
+    answer: str
+    created_at: datetime
+    created_at_ist: str
+
+
+class HistoryDetailResponse(BaseModel):
+    session: CookSessionResponse
+    followups: list[FollowupMessage]
 
 
 class AuthLoginRequest(BaseModel):

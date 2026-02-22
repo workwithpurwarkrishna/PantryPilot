@@ -12,6 +12,18 @@ class PantryScreen extends ConsumerStatefulWidget {
 }
 
 class _PantryScreenState extends ConsumerState<PantryScreen> {
+  static const _categories = <String>[
+    'Vegetables',
+    'Fruits',
+    'Grains & Cereals',
+    'Dairy',
+    'Proteins',
+    'Spices & Seasonings',
+    'Oils',
+    'Sauces',
+    'Others',
+  ];
+
   final _searchController = TextEditingController();
   bool _loading = false;
   String? _error;
@@ -185,42 +197,77 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
     }
 
     final nameController = TextEditingController();
-    final categoryController = TextEditingController();
     final unitController = TextEditingController();
+    String selectedCategory = _categories.first;
 
     try {
-      final created = await showDialog<bool>(
+      final created = await showModalBottomSheet<bool>(
         context: context,
+        isScrollControlled: true,
         builder: (context) {
-          return AlertDialog(
-            title: const Text('Add Ingredient'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: nameController,
-                  decoration: const InputDecoration(labelText: 'Name'),
-                ),
-                TextField(
-                  controller: categoryController,
-                  decoration: const InputDecoration(labelText: 'Category'),
-                ),
-                TextField(
-                  controller: unitController,
-                  decoration: const InputDecoration(labelText: 'Default Unit'),
-                ),
-              ],
+          final bottom = MediaQuery.of(context).viewInsets.bottom;
+          return StatefulBuilder(
+            builder: (context, setSheetState) => Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, bottom + 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Add Ingredient', style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Name',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: selectedCategory,
+                    items: _categories
+                        .map((c) => DropdownMenuItem<String>(value: c, child: Text(c)))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setSheetState(() {
+                        selectedCategory = value;
+                      });
+                    },
+                    decoration: const InputDecoration(
+                      labelText: 'Category',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: unitController,
+                    decoration: const InputDecoration(
+                      labelText: 'Default Unit',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text('Add'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Cancel'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Add'),
-              ),
-            ],
           );
         },
       );
@@ -230,7 +277,7 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
       await ref.read(apiClientProvider).createIngredient(
             accessToken: token,
             name: nameController.text.trim(),
-            category: categoryController.text.trim(),
+            category: selectedCategory,
             defaultUnit: unitController.text.trim(),
           );
 
@@ -246,7 +293,6 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
       });
     } finally {
       nameController.dispose();
-      categoryController.dispose();
       unitController.dispose();
     }
   }

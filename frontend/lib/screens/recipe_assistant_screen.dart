@@ -11,9 +11,19 @@ class RecipeAssistantScreen extends ConsumerStatefulWidget {
   const RecipeAssistantScreen({
     super.key,
     required this.dishName,
+    this.sourceQuery,
+    this.peopleCount,
+    this.extraBudgetInr,
+    this.maxTimeMinutes,
+    this.dishCardSnapshot,
   });
 
   final String dishName;
+  final String? sourceQuery;
+  final int? peopleCount;
+  final String? extraBudgetInr;
+  final int? maxTimeMinutes;
+  final Map<String, dynamic>? dishCardSnapshot;
 
   @override
   ConsumerState<RecipeAssistantScreen> createState() => _RecipeAssistantScreenState();
@@ -31,6 +41,8 @@ class _RecipeAssistantScreenState extends ConsumerState<RecipeAssistantScreen> {
   int? _remainingSeconds;
   int? _activeTimerStepIndex;
   bool _isTimerPaused = false;
+  String? _historySessionId;
+  bool _savingHistory = false;
 
   @override
   void initState() {
@@ -61,6 +73,7 @@ class _RecipeAssistantScreenState extends ConsumerState<RecipeAssistantScreen> {
             accessToken: token,
             dishName: widget.dishName,
             groqApiKey: groqKey,
+            sessionId: _historySessionId,
           );
       if (!mounted) return;
 
@@ -114,6 +127,7 @@ class _RecipeAssistantScreenState extends ConsumerState<RecipeAssistantScreen> {
             dishName: widget.dishName,
             question: q,
             groqApiKey: groqKey,
+            sessionId: _historySessionId,
           );
       if (!mounted) return;
 
@@ -192,6 +206,52 @@ class _RecipeAssistantScreenState extends ConsumerState<RecipeAssistantScreen> {
     });
   }
 
+  Future<void> _markAsCooked() async {
+    if (_savingHistory || _historySessionId != null) return;
+    final token = ref.read(currentSessionProvider)?.accessToken;
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _error = 'You must be logged in';
+      });
+      return;
+    }
+
+    setState(() {
+      _savingHistory = true;
+      _error = null;
+    });
+    try {
+      final response = await ref.read(apiClientProvider).createCookedHistory(
+            accessToken: token,
+            dishName: widget.dishName,
+            sourceQuery: widget.sourceQuery,
+            peopleCount: widget.peopleCount,
+            extraBudgetInr: widget.extraBudgetInr,
+            maxTimeMinutes: widget.maxTimeMinutes,
+            recipeSnapshot: _recipe,
+            dishCardSnapshot: widget.dishCardSnapshot,
+          );
+      if (!mounted) return;
+      setState(() {
+        _historySessionId = (response['id'] ?? '').toString();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Saved in history')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingHistory = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ingredients = (_recipe?['ingredients'] as List<dynamic>? ?? [])
@@ -234,6 +294,22 @@ class _RecipeAssistantScreenState extends ConsumerState<RecipeAssistantScreen> {
                                     Chip(label: Text('${_recipe?['difficulty'] ?? 'Easy'}')),
                                     if (_recipe?['calories_per_serving'] != null)
                                       Chip(label: Text('${_recipe?['calories_per_serving']} kcal')),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    FilledButton.icon(
+                                      onPressed: _savingHistory || _historySessionId != null
+                                          ? null
+                                          : _markAsCooked,
+                                      icon: const Icon(Icons.check_circle_outline),
+                                      label: Text(
+                                        _historySessionId == null
+                                            ? 'Mark as Cooked'
+                                            : 'Saved to History',
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+import re
+from typing import Any
 
 from groq import Groq
 
@@ -36,6 +38,7 @@ class AIService:
         custom_api_key: str | None,
         extra_budget_inr: str | None = None,
         people_count: int | None = None,
+        max_time_minutes: int | None = None,
     ) -> ChatResponse:
         api_key = self._resolve_api_key(custom_api_key)
         client = Groq(api_key=api_key)
@@ -63,12 +66,18 @@ class AIService:
             if people_count is not None and people_count > 0
             else ""
         )
+        max_time_line = (
+            f"Maximum time user wants to spend: {max_time_minutes} minutes\n"
+            if max_time_minutes is not None and max_time_minutes > 0
+            else ""
+        )
 
         user_prompt = (
             f"User Inventory: {pantry_list}\n"
             f"User Query: {user_query}\n"
             f"{budget_line}"
             f"{people_line}"
+            f"{max_time_line}"
             "Suggest 2 to 5 dishes based strictly on inventory + query."
         )
 
@@ -85,6 +94,7 @@ class AIService:
         content = completion.choices[0].message.content
         data = json.loads(content)
         data = self._normalize_chat_payload(data)
+        data = self._apply_time_preference_ranking(data, max_time_minutes=max_time_minutes)
         return ChatResponse.model_validate(data)
 
     def _normalize_chat_payload(self, data: dict) -> dict:
@@ -109,6 +119,71 @@ class AIService:
                     item["cost_est"] = str(item["cost_est"])
 
         return data
+
+    def _apply_time_preference_ranking(self, data: dict, max_time_minutes: int | None) -> dict:
+        if max_time_minutes is None:
+            return data
+
+        dishes = data.get("dishes")
+        if not isinstance(dishes, list):
+            return data
+
+        under: list[tuple[float, int, dict[str, Any]]] = []
+        over: list[tuple[float, int, dict[str, Any]]] = []
+        unknown: list[tuple[int, dict[str, Any]]] = []
+
+        for index, dish in enumerate(dishes):
+            if not isinstance(dish, dict):
+                continue
+            minutes = self._extract_minutes(dish.get("cooking_time"))
+            if minutes is None:
+                unknown.append((index, dish))
+                continue
+            score = abs(minutes - max_time_minutes)
+            if minutes <= max_time_minutes:
+                under.append((score, index, dish))
+            else:
+                over.append((score, index, dish))
+
+        under.sort(key=lambda item: (item[0], item[1]))
+        over.sort(key=lambda item: (item[0], item[1]))
+
+        ordered = [dish for _, _, dish in under]
+        if over:
+            ordered.append(over[0][2])
+        ordered.extend(dish for _, dish in unknown)
+
+        if ordered:
+            data["dishes"] = ordered[:5]
+        return data
+
+    def _extract_minutes(self, raw: Any) -> int | None:
+        if raw is None:
+            return None
+        text = str(raw).strip().lower()
+        if not text:
+            return None
+
+        minutes = 0
+        matched = False
+
+        hour_match = re.search(r"(\d+)\s*(h|hr|hrs|hour|hours)", text)
+        if hour_match:
+            minutes += int(hour_match.group(1)) * 60
+            matched = True
+
+        minute_match = re.search(r"(\d+)\s*(m|min|mins|minute|minutes)", text)
+        if minute_match:
+            minutes += int(minute_match.group(1))
+            matched = True
+
+        if matched:
+            return minutes
+
+        digits = re.search(r"\d+", text)
+        if digits:
+            return int(digits.group(0))
+        return None
 
     def generate_recipe_assistant_answer(
         self,

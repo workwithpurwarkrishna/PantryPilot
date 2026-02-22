@@ -87,6 +87,7 @@ class ApiClient {
     String? groqApiKey,
     String? extraBudgetInr,
     int? peopleCount,
+    int? maxTimeMinutes,
   }) async {
     final headers = _authHeaders(accessToken);
     if (groqApiKey != null && groqApiKey.isNotEmpty) {
@@ -101,6 +102,7 @@ class ApiClient {
         if (extraBudgetInr != null && extraBudgetInr.trim().isNotEmpty)
           'extra_budget_inr': extraBudgetInr.trim(),
         'people_count': peopleCount,
+        'max_time_minutes': maxTimeMinutes,
         'provider': 'groq',
       }),
     );
@@ -113,6 +115,7 @@ class ApiClient {
     required String dishName,
     String? question,
     String? groqApiKey,
+    String? sessionId,
   }) async {
     final headers = _authHeaders(accessToken);
     if (groqApiKey != null && groqApiKey.isNotEmpty) {
@@ -125,9 +128,60 @@ class ApiClient {
       body: jsonEncode({
         'dish_name': dishName,
         if (question != null && question.trim().isNotEmpty) 'question': question.trim(),
+        if (sessionId != null && sessionId.isNotEmpty) 'session_id': sessionId,
       }),
     );
 
+    return _decode(response);
+  }
+
+  Future<Map<String, dynamic>> createCookedHistory({
+    required String accessToken,
+    required String dishName,
+    String? sourceQuery,
+    int? peopleCount,
+    String? extraBudgetInr,
+    int? maxTimeMinutes,
+    Map<String, dynamic>? recipeSnapshot,
+    Map<String, dynamic>? dishCardSnapshot,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/history/cooked'),
+      headers: _authHeaders(accessToken),
+      body: jsonEncode({
+        'dish_name': dishName,
+        if (sourceQuery != null && sourceQuery.trim().isNotEmpty) 'source_query': sourceQuery.trim(),
+        'people_count': peopleCount,
+        if (extraBudgetInr != null && extraBudgetInr.trim().isNotEmpty)
+          'extra_budget_inr': extraBudgetInr.trim(),
+        'max_time_minutes': maxTimeMinutes,
+        'recipe_snapshot': recipeSnapshot,
+        'dish_card_snapshot': dishCardSnapshot,
+      }),
+    );
+    return _decode(response);
+  }
+
+  Future<List<Map<String, dynamic>>> getHistory({
+    required String accessToken,
+    int limit = 50,
+  }) async {
+    final uri = Uri.parse('$baseUrl/history').replace(
+      queryParameters: {'limit': '$limit'},
+    );
+    final response = await http.get(uri, headers: _authHeaders(accessToken));
+    final payload = _decode(response);
+    return (payload['items'] as List<dynamic>).cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> getHistoryDetail({
+    required String accessToken,
+    required String sessionId,
+  }) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/history/$sessionId'),
+      headers: _authHeaders(accessToken),
+    );
     return _decode(response);
   }
 
